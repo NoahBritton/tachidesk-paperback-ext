@@ -1,6 +1,6 @@
 {
   "name": "tachidesk-paperback-ext",
-  "version": "2.1.1-nb1",
+  "version": "2.1.2-nb1",
   "repositoryName": "Tachidesk Extension - personal fork",
   "description": "Personal fork of community Tachidesk Paperback extension",
   "main": "index.js",
