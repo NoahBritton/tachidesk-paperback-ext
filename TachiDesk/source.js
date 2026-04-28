@@ -3337,7 +3337,7 @@ exports.TachiDeskInfo = {
     description: 'Paperback extension bridging Suwayomi/Tachidesk features into Paperback - personal fork',
     icon: 'icon.png',
     name: 'Tachidesk',
-    version: '2.1.1-nb1',
+    version: '2.1.2-nb1',
     websiteBaseURL: "https://github.com/NoahBritton/tachidesk-paperback-ext",
     contentRating: types_1.ContentRating.ADULT,
     sourceTags: [
@@ -3401,16 +3401,43 @@ class TachiDesk {
     // Manga info -> uses TachiManga interface
     async getMangaDetails(mangaId) {
         const manga = await (0, Common_1.makeRequest)(this.stateManager, this.requestManager, "manga/" + mangaId);
-        const tags = [
-            App.createTagSection({
-                id: "0",
-                label: "genres",
-                tags: manga.genre.map((tag) => App.createTag({
-                    id: tag,
-                    label: tag
-                }))
-            })
+        // ----- Tag namespacing (NoahBritton fork) -----
+        // Many sources (notably NHentai, AsmHentai, etc.) prefix their tags with a namespace
+        // like "Tag: vanilla", "Artist: foo", "Parody: bar", "Character: baz", "Category: doujinshi".
+        // Upstream flattens everything into one "genres" blob, which kills the rich tag UX.
+        // Here we split on the first ": " into (namespace, value), group by namespace, and
+        // emit one TagSection per namespace. Untagged entries fall into a generic "Genres" section.
+        const namespaceOrder = ["Tag", "Genre", "Artist", "Group", "Parody", "Character", "Category", "Language"];
+        const grouped = {};
+        for (const raw of manga.genre ?? []) {
+            const m = raw.match(/^([A-Za-z][A-Za-z0-9 ]*?)\s*:\s*(.+)$/);
+            if (m) {
+                const ns = m[1].trim();
+                const val = m[2].trim();
+                if (!grouped[ns])
+                    grouped[ns] = [];
+                grouped[ns].push(val);
+            }
+            else {
+                if (!grouped["Genres"])
+                    grouped["Genres"] = [];
+                grouped["Genres"].push(raw);
+            }
+        }
+        const orderedKeys = [
+            ...namespaceOrder.filter(k => grouped[k]),
+            ...Object.keys(grouped).filter(k => !namespaceOrder.includes(k) && k !== "Genres"),
+            ...(grouped["Genres"] ? ["Genres"] : []),
         ];
+        const tags = orderedKeys.map((ns, idx) => App.createTagSection({
+            id: String(idx),
+            label: ns,
+            tags: grouped[ns].map((t) => App.createTag({
+                id: `${ns}:${t}`,
+                label: t,
+            }))
+        }));
+        // ----- end NoahBritton fork changes -----
         return App.createSourceManga({
             id: mangaId,
             mangaInfo: App.createMangaInfo({
