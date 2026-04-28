@@ -3333,13 +3333,13 @@ const types_1 = require("@paperback/types");
 const Settings_1 = require("./Settings");
 const Common_1 = require("./Common");
 exports.TachiDeskInfo = {
-    author: 'ofelizestevez & Alles',
-    description: 'Paperback extension which aims to bridge all of Tachidesks features and the Paperback App.',
+    author: 'NoahBritton (fork of ofelizestevez & Alles)',
+    description: 'Paperback extension bridging Suwayomi/Tachidesk features into Paperback - personal fork',
     icon: 'icon.png',
     name: 'Tachidesk',
-    version: '2.1.0',
-    websiteBaseURL: "https://github.com/Suwayomi/Tachidesk-Server",
-    contentRating: types_1.ContentRating.EVERYONE,
+    version: '2.1.1-nb1',
+    websiteBaseURL: "https://github.com/NoahBritton/tachidesk-paperback-ext",
+    contentRating: types_1.ContentRating.ADULT,
     sourceTags: [
         {
             text: "Self-hosted",
