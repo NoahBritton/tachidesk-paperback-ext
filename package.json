@@ -1,8 +1,8 @@
 {
   "name": "tachidesk-paperback-ext",
-  "version": "1.0.0",
-  "repositoryName": "Tachidesk Extension",
-  "description": "Community maintained Paperback extension repository",
+  "version": "2.1.1-nb1",
+  "repositoryName": "Tachidesk Extension - personal fork",
+  "description": "Personal fork of community Tachidesk Paperback extension",
   "main": "index.js",
   "scripts": {
     "bundle": "npx paperback bundle",
