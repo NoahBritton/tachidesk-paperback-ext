@@ -2720,11 +2720,18 @@ async function makeRequest(stateManager, requestManager, apiEndpoint, method = "
         return Error("Your query is invalid. " + JSON.stringify(response?.status));
     }
     // Checks for garbage data
+    // NoahBritton fork: detect Cloudflare HTML and return an actionable error instead
+    // of a cryptic "JSON Parse error: Unexpected identifier 'Cloudflare'" crash.
     try {
         responseData = JSON.parse(response.data ?? "");
     }
     catch (error) {
-        return Error(apiEndpoint);
+        const body = (response.data ?? "").slice(0, 200);
+        const isCloudflare = /cloudflare|cf-ray|just a moment|attention required/i.test(body);
+        if (isCloudflare) {
+            return Error(`Cloudflare challenge on ${apiEndpoint} — the Suwayomi server failed to bypass. Try the request again, or check Suwayomi's JCEF status.`);
+        }
+        return Error(`Bad response from ${apiEndpoint}: ${body.slice(0, 80)}`);
     }
     return responseData;
 }
@@ -3337,7 +3344,7 @@ exports.TachiDeskInfo = {
     description: 'Paperback extension bridging Suwayomi/Tachidesk features into Paperback - personal fork',
     icon: 'icon.png',
     name: 'Tachidesk',
-    version: '2.1.2-nb1',
+    version: '2.1.3-nb1',
     websiteBaseURL: "https://github.com/NoahBritton/tachidesk-paperback-ext",
     contentRating: types_1.ContentRating.ADULT,
     sourceTags: [
@@ -3631,7 +3638,24 @@ class TachiDesk {
         for (const section of sections) {
             sectionCallback(section.section);
             promises.push(this.requestManager.schedule(section.request, 1).then(async (response) => {
-                const json = JSON.parse(response.data ?? "");
+                // ----- NoahBritton fork: defensive parse + Cloudflare detection -----
+                // Source extensions (NHentai, etc.) sometimes return a Cloudflare challenge
+                // page (HTML) instead of JSON. Upstream JSON.parse'd blindly and crashed the
+                // entire homepage with an unhandled promise rejection. We now catch parse
+                // failures, leave that section's tiles empty, and let the rest render.
+                let json;
+                try {
+                    json = JSON.parse(response.data ?? "");
+                }
+                catch (e) {
+                    const body = (response.data ?? "").slice(0, 200);
+                    const isCloudflare = /cloudflare|cf-ray|just a moment|attention required/i.test(body);
+                    console.log(`[Tachidesk] homepage section "${section.section.title}" parse failed: ${isCloudflare ? "Cloudflare challenge — Suwayomi server-side bypass needed for this source" : "non-JSON response"}`);
+                    section.section.items = [];
+                    sectionCallback(section.section);
+                    return;
+                }
+                // ----- end fork changes -----
                 const tiles = [];
                 // Uses the responseAray to get manga list
                 let data;
@@ -3645,6 +3669,13 @@ class TachiDesk {
                     default:
                         data = json;
                         break;
+                }
+                // Defensive: if data is null/undefined, skip rather than crash
+                if (!Array.isArray(data)) {
+                    console.log(`[Tachidesk] homepage section "${section.section.title}" returned no manga array`);
+                    section.section.items = [];
+                    sectionCallback(section.section);
+                    return;
                 }
                 // Cuts manga list to the first X amount of manga (from settings)
                 for (const mangaResponse of data.slice(0, mangaPerRow)) {
@@ -3662,6 +3693,12 @@ class TachiDesk {
                     }));
                 }
                 section.section.items = tiles;
+                sectionCallback(section.section);
+            }).catch((e) => {
+                // Catch-all for any other failure (network, etc.) so one broken section
+                // doesn't tank the entire homepage render.
+                console.log(`[Tachidesk] homepage section "${section.section.title}" failed: ${e?.message ?? e}`);
+                section.section.items = [];
                 sectionCallback(section.section);
             }));
         }
