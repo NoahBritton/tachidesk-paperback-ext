@@ -68,7 +68,7 @@ export const TachiDeskInfo: SourceInfo = {
     description: 'Paperback extension bridging Suwayomi/Tachidesk features into Paperback - personal fork',
     icon: 'icon.png',
     name: 'Tachidesk',
-    version: '2.1.3-nb1',
+    version: '2.1.4-nb1',
     websiteBaseURL: "https://github.com/NoahBritton/tachidesk-paperback-ext",
     contentRating: ContentRating.ADULT,
     sourceTags: [
@@ -136,7 +136,25 @@ export class TachiDesk implements PaperbackExtensionBase, MangaProgressProviding
 
     // Manga info -> uses TachiManga interface
     async getMangaDetails(mangaId: string): Promise<SourceManga> {
-        const manga: tachiManga = await makeRequest(this.stateManager, this.requestManager, "manga/" + mangaId)
+        // ----- NoahBritton fork: force-fetch if manga is a stub -----
+        // Discover homepage sections return stub manga records (title + cover only,
+        // no genre/author/description). Tapping into details would render an empty
+        // page until something else populated the cache. The Suwayomi API supports
+        // ?onlineFetch=true which triggers a real source scrape. We use it whenever
+        // the cached record is uninitialized or has no tags yet.
+        let manga: tachiManga = await makeRequest(this.stateManager, this.requestManager, "manga/" + mangaId)
+        const needsFetch = (
+            !(manga as any)?.initialized ||
+            !Array.isArray((manga as any)?.genre) ||
+            (manga as any).genre.length === 0
+        )
+        if (needsFetch) {
+            const fresh = await makeRequest(this.stateManager, this.requestManager, "manga/" + mangaId + "?onlineFetch=true")
+            if (fresh && !(fresh instanceof Error)) {
+                manga = fresh as tachiManga
+            }
+        }
+        // ----- end fork changes -----
 
         // ----- Tag namespacing (NoahBritton fork) -----
         // Many sources (notably NHentai, AsmHentai, etc.) prefix their tags with a namespace
