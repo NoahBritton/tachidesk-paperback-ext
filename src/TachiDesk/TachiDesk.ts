@@ -68,7 +68,7 @@ export const TachiDeskInfo: SourceInfo = {
     description: 'Paperback extension bridging Suwayomi/Tachidesk features into Paperback - personal fork',
     icon: 'icon.png',
     name: 'Tachidesk',
-    version: '2.1.2-nb1',
+    version: '2.1.3-nb1',
     websiteBaseURL: "https://github.com/NoahBritton/tachidesk-paperback-ext",
     contentRating: ContentRating.ADULT,
     sourceTags: [
@@ -400,7 +400,24 @@ export class TachiDesk implements PaperbackExtensionBase, MangaProgressProviding
 
             promises.push(
                 this.requestManager.schedule(section.request, 1).then(async response => {
-                    const json = JSON.parse(response.data ?? "")
+                    // ----- NoahBritton fork: defensive parse + Cloudflare detection -----
+                    // Source extensions (NHentai, etc.) sometimes return a Cloudflare challenge
+                    // page (HTML) instead of JSON. Upstream JSON.parse'd blindly and crashed the
+                    // entire homepage with an unhandled promise rejection. We now catch parse
+                    // failures, leave that section's tiles empty, and let the rest render.
+                    let json: any;
+                    try {
+                        json = JSON.parse(response.data ?? "")
+                    } catch (e) {
+                        const body = (response.data ?? "").slice(0, 200)
+                        const isCloudflare = /cloudflare|cf-ray|just a moment|attention required/i.test(body)
+                        console.log(`[Tachidesk] homepage section "${section.section.title}" parse failed: ${isCloudflare ? "Cloudflare challenge — Suwayomi server-side bypass needed for this source" : "non-JSON response"}`)
+                        section.section.items = []
+                        sectionCallback(section.section)
+                        return
+                    }
+                    // ----- end fork changes -----
+
                     const tiles = []
 
                     // Uses the responseAray to get manga list
@@ -415,6 +432,14 @@ export class TachiDesk implements PaperbackExtensionBase, MangaProgressProviding
                         default:
                             data = json
                             break;
+                    }
+
+                    // Defensive: if data is null/undefined, skip rather than crash
+                    if (!Array.isArray(data)) {
+                        console.log(`[Tachidesk] homepage section "${section.section.title}" returned no manga array`)
+                        section.section.items = []
+                        sectionCallback(section.section)
+                        return
                     }
 
                     // Cuts manga list to the first X amount of manga (from settings)
@@ -437,6 +462,12 @@ export class TachiDesk implements PaperbackExtensionBase, MangaProgressProviding
                     }
 
                     section.section.items = tiles
+                    sectionCallback(section.section)
+                }).catch((e: any) => {
+                    // Catch-all for any other failure (network, etc.) so one broken section
+                    // doesn't tank the entire homepage render.
+                    console.log(`[Tachidesk] homepage section "${section.section.title}" failed: ${e?.message ?? e}`)
+                    section.section.items = []
                     sectionCallback(section.section)
                 })
             )

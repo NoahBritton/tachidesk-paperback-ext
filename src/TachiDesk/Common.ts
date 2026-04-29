@@ -336,11 +336,18 @@ export async function makeRequest(stateManager: SourceStateManager, requestManag
     }
 
     // Checks for garbage data
+    // NoahBritton fork: detect Cloudflare HTML and return an actionable error instead
+    // of a cryptic "JSON Parse error: Unexpected identifier 'Cloudflare'" crash.
     try {
         responseData = JSON.parse(response.data ?? "")
     }
     catch (error: any) {
-        return Error(apiEndpoint)
+        const body = (response.data ?? "").slice(0, 200)
+        const isCloudflare = /cloudflare|cf-ray|just a moment|attention required/i.test(body)
+        if (isCloudflare) {
+            return Error(`Cloudflare challenge on ${apiEndpoint} — the Suwayomi server failed to bypass. Try the request again, or check Suwayomi's JCEF status.`)
+        }
+        return Error(`Bad response from ${apiEndpoint}: ${body.slice(0, 80)}`)
     }
 
     return responseData
